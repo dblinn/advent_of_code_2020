@@ -1,0 +1,11 @@
+[package]
+name = "day_04"
+version = "0.1.0"
+authors = ["dblinn <david.blinn@turbonomic.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+advent_of_code_2020 = { version = "0.1.0", path = "../" }
+dotenv = "0.15"
