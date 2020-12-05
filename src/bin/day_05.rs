@@ -11,8 +11,6 @@ fn seat_id(boarding_pass: &str) -> usize {
 const DAY: u8 = 5;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    dotenv::dotenv().ok();
-
     let input = advent_of_code_2020::get_puzzle_input(DAY)?;
     let max_seat_id = input.lines().map(|l| seat_id(l.trim())).max().unwrap();
 
@@ -26,8 +24,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Part1: {}", max_seat_id);
     println!("Part2: {}", my_seat);
-    advent_of_code_2020::check_answer(DAY, 1, max_seat_id)?;
-    advent_of_code_2020::check_answer(DAY, 2, my_seat)?;
     Ok(())
 }
 

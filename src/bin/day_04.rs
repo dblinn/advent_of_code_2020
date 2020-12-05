@@ -1,8 +1,6 @@
 use std::str::FromStr;
 use std::error::Error;
 
-const DAY: u8 = 4;
-
 struct Passport {
     byr: String,
     iyr: String,
@@ -132,12 +130,12 @@ fn part2(input: &str) -> usize {
         .count()
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    dotenv::dotenv().ok();
+const DAY: u8 = 4;
 
+fn main() -> Result<(), Box<dyn Error>> {
     let input = advent_of_code_2020::get_puzzle_input(DAY)?;
-    advent_of_code_2020::check_answer(DAY, 1, part1(&input))?;
-    advent_of_code_2020::check_answer(DAY, 2, part2(&input))?;
+    println!("Part1: {}", part1(&input));
+    println!("Part2: {}", part2(&input));
 
     Ok(())
 }
