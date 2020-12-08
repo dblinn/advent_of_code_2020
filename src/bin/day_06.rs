@@ -16,7 +16,7 @@ fn all_answered(group: &str) -> usize {
             *acc.entry(c).or_insert(0) += 1;
             acc
         });
-    counts.iter().filter(|(_, count)| **count == num_group_members).count()
+    counts.values().filter(|count| **count == num_group_members).count()
 }
 
 fn  part1(input: &str) -> usize {
