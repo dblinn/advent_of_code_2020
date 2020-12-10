@@ -7,7 +7,10 @@ fn part1(input: &str) -> [usize; 3] {
         .collect::<Vec<usize>>();
     vec.sort();
 
+    // There is always an extra implicit 3 because of the last adapter
     let mut diffs: [usize; 3] = [0, 0, 1];
+    // The value of the first adapter is its own difference because it's plugged into
+    // something with a value of 0.
     diffs[*vec.first().unwrap() - 1] += 1;
 
     for diff in vec.windows(2).map(|w| w[1] - w[0]) {
@@ -65,13 +68,10 @@ fn part2(input: &str) -> usize {
     }
 
     let mut combination_count_cache: HashMap<usize, usize> = HashMap::new();
-    for i in 1..=4 {
-        combination_count_cache.insert(vec[vec.len() - i], 1);
-    }
 
     for val in vec.iter().rev().skip(4) {
         let sum = range_cache.get(val).unwrap().iter()
-            .map(|r| *combination_count_cache.get(r).unwrap())
+            .map(|r| *combination_count_cache.get(r).unwrap_or(&1))
             .sum();
         combination_count_cache.insert(*val, sum);
     }
