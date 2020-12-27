@@ -33,7 +33,6 @@ fn possible_ingredients(allergen: &String, ing: &Vec<IngredientList>) -> HashSet
         }
     }
 
-    println!("{}: {:?}", allergen, p);
     p
 }
 
