@@ -30,7 +30,7 @@ fn calculate_pos(line: &str) -> (i32, i32) {
     (x, y)
 }
 
-fn part1(input: &str) -> usize {
+fn compute_black_tiles(input: &str) -> HashSet<(i32, i32)> {
     let mut black_tiles: HashSet<(i32, i32)> = HashSet::new();
     for l in input.lines() {
         let pos = calculate_pos(l);
@@ -40,6 +40,11 @@ fn part1(input: &str) -> usize {
             black_tiles.insert(pos);
         }
     }
+    black_tiles
+}
+
+fn part1(input: &str) -> usize {
+    let black_tiles = compute_black_tiles(input);
 
     black_tiles.len()
 }
@@ -88,15 +93,7 @@ fn simulate(black_tiles: HashSet<(i32, i32)>) -> HashSet<(i32, i32)> {
 }
 
 fn part2(input: &str) -> usize {
-    let mut black_tiles: HashSet<(i32, i32)> = HashSet::new();
-    for l in input.lines() {
-        let pos = calculate_pos(l);
-        if black_tiles.contains(&pos) {
-            black_tiles.remove(&pos);
-        } else {
-            black_tiles.insert(pos);
-        }
-    }
+    let mut black_tiles = compute_black_tiles(input);
 
     for _ in 0 .. 100 {
         black_tiles = simulate(black_tiles);
