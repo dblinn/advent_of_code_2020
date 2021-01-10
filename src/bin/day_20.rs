@@ -1,6 +1,6 @@
 use std::error::Error;
 use itertools::Itertools;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use crate::Orientation::{Rot90FlipV, Rot270, Rot270FlipV};
 
 struct Tile {
@@ -155,32 +155,47 @@ fn compute_potential_neighbors(tiles: &Vec<Tile>) -> Vec<HashSet<usize>> {
     neighbors
 }
 
-// Given the tiles already placed, what orientations are possible for the next tile.
-fn possible_orientations(tiles: &Vec<Tile>, placed: &Vec<(usize, Orientation)>,
-                         tile: &Tile, next: usize, dim: usize) -> Vec<Orientation> {
+// Given the tiles placed so far, what tiles can possibly be placed next.
+fn possible_next_neighbors(tiles: &Vec<Tile>, placed: &VecDeque<(usize, Orientation)>,
+                           neighbors: &Vec<HashSet<usize>>,
+                           next: usize, dim: usize) -> Vec<(usize, Orientation)> {
     let row = next / dim;
     let col = next % dim;
+    if row == 0 && col == 0 {
+        return (0 .. tiles.len()).into_iter()
+            .flat_map(|i| ORIENTATIONS.iter().map(move |&o| (i, o)))
+            .collect();
+    }
 
-    let above_bottom = if row != 0 {
-        let (above_tile, above_o) = placed[(row - 1) * dim + col];
-        let above = &tiles[above_tile];
-        Some(above.bottom(above_o))
-    } else {
-        None
-    };
+    let above: Option<(usize, Orientation)> = if row != 0 {
+        Some(placed[(row - 1) * dim + col]) } else { None };
+    let left: Option<(usize, Orientation)> = if col != 0 {
+        Some(placed[next - 1]) } else { None };
 
-    let left_right = if col != 0 {
-        let (left_tile, left_o) = placed[next - 1];
-        let left = &tiles[left_tile];
-        Some(left.right(left_o))
-    } else {
-        None
-    };
+    let possible_neighbors = above
+        .map_or_else(|| neighbors[left.unwrap().0].clone(), |a| left
+            .map_or_else(|| neighbors[a.0].clone(),
+                         |b| neighbors[a.0]
+                             .intersection(&neighbors[b.0])
+                             .cloned()
+                             .collect()));
 
+    possible_neighbors.iter()
+        .filter(|&&neighbor| !placed.iter()
+            .any(|&(i, _)| neighbor == i))
+        .flat_map(|&neighbor| possible_orientations(tiles, above, left, neighbor).into_iter()
+            .map(move |o| (neighbor, o)))
+        .collect()
+}
+
+// Given the tiles already placed, what orientations are possible for the next tile.
+fn possible_orientations    (tiles: &Vec<Tile>, above: Option<(usize, Orientation)>,
+                         left: Option<(usize, Orientation)>, next: usize) -> Vec<Orientation> {
+    let tile = &tiles[next];
     ORIENTATIONS.iter().filter(|&&o|
-        above_bottom.map_or(true, |ab| tile.top(o) == ab)
+        above.map_or(true, |(ai, ao)| tile.top(o) == tiles[ai].bottom(ao))
     ).filter(|&&o|
-        left_right.map_or(true, |lr| tile.left(o) == lr)
+        left.map_or(true, |(li, lo)| tile.left(o) == tiles[li].right(lo))
     ).map(|o| *o)
         .collect::<Vec<Orientation>>()
 }
@@ -204,27 +219,6 @@ fn parse_tile(input: &str) -> Tile {
     let pic = l.map(|row| row.chars().collect::<Vec<char>>())
         .collect::<Vec<Vec<char>>>();
     Tile::new(num, pic)
-}
-
-fn find_placements(tiles: &Vec<Tile>, dim: usize) -> Vec<(usize, Orientation)> {
-    let mut arrangements = (0 .. tiles.len())
-        .permutations(tiles.len())
-        .collect::<Vec<Vec<usize>>>();
-    loop {
-        let arrangement = arrangements.first().expect("Some arrangement worked");
-        let result = check_arrangement(tiles, &mut vec!(), dim, &arrangement);
-
-        if let Some(orientation) = result.0 {
-            return arrangement.iter().zip(orientation)
-                .map(|(&p, o)| (p, o))
-                .collect();
-        } else {
-            // Remove all arrangements that contain the pattern that failed.
-            arrangements.retain(|arr|
-                !arrangement_contains(arr, &result.1, dim));
-            println!("Remaining: {}", arrangements.len());
-        }
-    }
 }
 
 // Test if the arrangement matches the pattern where the main
@@ -254,57 +248,43 @@ fn arrangement_contains(arrangement: &Vec<usize>, pattern: &(usize, usize, usize
     false
 }
 
-fn check_arrangement(tiles: &Vec<Tile>, placed: &mut Vec<(usize, Orientation)>,
-                     dim: usize, arrangement: &Vec<usize>)
-    -> (Option<Vec<Orientation>>, (usize, usize, usize)) {
-    let next = arrangement[placed.len()];
-    let o = if placed.is_empty() {
-        ORIENTATIONS.to_vec()
-    } else {
-        possible_orientations(tiles, placed, &tiles[next], next, dim)
-    };
+fn arrange(tiles: &Vec<Tile>, neighbors: &Vec<HashSet<usize>>,
+           placed: &mut VecDeque<(usize, Orientation)>, dim: usize) -> Option<()> {
+    for (tile_ndx, orientation) in
+        possible_next_neighbors(tiles, placed, neighbors, placed.len(), dim) {
+        placed.push_back((tile_ndx, orientation));
 
-    // TODO: This is not actually correct because the above and left may be locked
-    // FIXME: out of some valid orientations which we strip out even though they might work.
-    // If no orientations are possible, the arrangement fails.
-    // Return the main, above, and left that had no orientations that worked.
-    //
-    if o.is_empty() {
-        return (None, (next, if next > dim { next - dim } else { 0 }, next - 1));
-    }
-
-    for orientation in o {
-        placed.push((next, orientation));
         if placed.len() == tiles.len() {
-            return (Some(placed.iter().map(|(_, orient)| *orient).collect()), (0,0,0));
+            return Some(());
         }
-
-        let res = check_arrangement(tiles, placed, dim, arrangement);
-        if res.0.is_some() {
-            return res;
+        if let Some(_) = arrange(tiles, neighbors, placed, dim) {
+            return Some(());
+        } else {
+            placed.pop_back();
         }
     }
 
-    (None, (next, if next > dim { next - dim } else { 0 }, if next > 0 { next - 1 } else { 0 }))
+    None
 }
+
 
 fn part1(input: &str) -> usize {
     let tiles = input.trim().split("\n\n")
         .map(|t| parse_tile(t))
         .collect::<Vec<Tile>>();
 
-    println!("{:?}", compute_potential_neighbors(&tiles));
-
-    // let len = ((tiles.len() as f64).sqrt() + 0.0001) as usize;
-    // let orientations = find_placements(&tiles, len);
-
-    // let (tl, tr, bl, br) =
-    //     (orientation[0], orientation[len-1], orientation[len * (len - 1)], orientation[len * len - 1]);
-    // tiles[tl.0 * len + tl.1].num *
-    //     tiles[tr.0 * len + tr.1].num *
-    //     tiles[bl.0 * len + bl.1].num *
-    //     tiles[br.0 * len + br.1].num
-    0
+    let dim = (tiles.len() as f32).sqrt().round() as usize;
+    let neighbors = compute_potential_neighbors(&tiles);
+    let mut placed: VecDeque<(usize, Orientation)> = VecDeque::new();
+    if let Some(_) = arrange(&tiles, &neighbors, &mut placed, dim) {
+        let (tl, tlo) = placed[0];
+        let (tr, tro) = placed[dim-1];
+        let (bl, blo) = placed[placed.len() - dim];
+        let &(br, bro) = placed.back().unwrap();
+        tiles[tl].num * tiles[tr].num * tiles[bl].num * tiles[br].num
+    } else {
+        panic!("No possible arrangement")
+    }
 }
 
 fn part2(input: &str) -> usize {
@@ -441,7 +421,7 @@ Tile 3079:
 
     #[test]
     fn example2() {
-        assert_eq!(286, part2(INPUT));
+        assert_eq!(273, part2(INPUT));
     }
 
     #[test]
@@ -525,11 +505,21 @@ Tile 3079:
 .####");
 
         let v = vec!(t1, t2, t3, t4);
-        assert_eq!(vec!(Orientation::FlipH, Orientation::FlipVH),
-                   possible_orientations(&v,
-                                         &vec!((0, Orientation::Original),
-                                               (1, Orientation::Original),
-                                               (2, Orientation::Original)),
-                                         &v[3], 3, 2));
+        let placed = [(0, Orientation::Original),
+                          (1, Orientation::Original),
+                          (2, Orientation::Original)].iter()
+            .cloned()
+            .collect();
+        let neighbors = vec!(
+            [2,3].iter().cloned().collect(),
+            [3].iter().cloned().collect(),
+            [0,3].iter().cloned().collect(),
+            [0,1,2].iter().cloned().collect()
+        );
+
+        // assert_eq!(vec!(Orientation::FlipH, Orientation::FlipVH),
+        //            possible_orientations(&v, &placed,
+        //                                  &v[3], 3, 2));
+        println!("{:?}", possible_next_neighbors(&v, &placed, &neighbors, 3, 2));
     }
 }
