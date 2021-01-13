@@ -132,6 +132,20 @@ impl Tile {
         [self.l, self.lflip, self.r, self.rflip, self.t, self.tflip, self.b, self.bflip]
             .iter().cloned().collect()
     }
+
+    fn line(&self, num: usize, orient: Orientation) -> String {
+        match orient {
+            Orientation::Original => self.pic[num].iter().collect(),
+            Orientation::FlipV => self.pic.iter().rev().skip(num).next().unwrap().iter().collect(),
+            Orientation::FlipH => self.pic[num].iter().rev().collect(),
+            Orientation::FlipVH => self.pic.iter().rev().skip(num).next().unwrap()
+                .iter().rev().collect(),
+            Orientation::Rot90 => self.pic.iter().rev().map(|l| l[num]).collect(),
+            Orientation::Rot90FlipV => self.pic.iter().rev().map(|l| l[l.len() - num - 1]).collect(),
+            Orientation::Rot270 => self.pic.iter().map(|l| l[l.len() - num - 1]).collect(),
+            Orientation::Rot270FlipV => self.pic.iter().map(|l| l[num]).collect(),
+        }
+    }
 }
 
 /// For each tile, find all other tiles that could possibly be
@@ -267,6 +281,17 @@ fn arrange(tiles: &Vec<Tile>, neighbors: &Vec<HashSet<usize>>,
     None
 }
 
+fn join_picture(tiles: &Vec<Tile>, placements: &VecDeque<(usize, Orientation)>,
+                dim: usize) -> Vec<String> {
+    let line_length = tiles.first().unwrap().pic.len();
+    placements.iter().chunks(dim).into_iter().flat_map(|chunk| {
+        let row_placements: Vec<(usize, Orientation)> = chunk.into_iter().cloned().collect();
+        (1..line_length-1).into_iter()
+            .map(move |i| row_placements.iter().map(|&(tile_ndx, tile_orient)|
+                tiles[tile_ndx].line(i, tile_orient)[1..line_length-1].to_string())
+                .join(""))
+    }).collect::<Vec<String>>()
+}
 
 fn part1(input: &str) -> usize {
     let tiles = input.trim().split("\n\n")
@@ -277,10 +302,10 @@ fn part1(input: &str) -> usize {
     let neighbors = compute_potential_neighbors(&tiles);
     let mut placed: VecDeque<(usize, Orientation)> = VecDeque::new();
     if let Some(_) = arrange(&tiles, &neighbors, &mut placed, dim) {
-        let (tl, tlo) = placed[0];
-        let (tr, tro) = placed[dim-1];
-        let (bl, blo) = placed[placed.len() - dim];
-        let &(br, bro) = placed.back().unwrap();
+        let (tl, _) = placed[0];
+        let (tr, _) = placed[dim-1];
+        let (bl, _) = placed[placed.len() - dim];
+        let &(br, _) = placed.back().unwrap();
         tiles[tl].num * tiles[tr].num * tiles[bl].num * tiles[br].num
     } else {
         panic!("No possible arrangement")
@@ -288,6 +313,20 @@ fn part1(input: &str) -> usize {
 }
 
 fn part2(input: &str) -> usize {
+    let tiles = input.trim().split("\n\n")
+        .map(|t| parse_tile(t))
+        .collect::<Vec<Tile>>();
+
+    let dim = (tiles.len() as f32).sqrt().round() as usize;
+    let neighbors = compute_potential_neighbors(&tiles);
+    let mut placed: VecDeque<(usize, Orientation)> = VecDeque::new();
+    if let Some(_) = arrange(&tiles, &neighbors, &mut placed, dim) {
+        let pic = join_picture(&tiles, &placed, dim);
+        println!("{}", pic.iter().join("\n"));
+    } else {
+        panic!("No possible arrangement")
+    }
+
     0
 }
 
@@ -467,6 +506,25 @@ Tile 3079:
         assert_eq!(16, t.right(Orientation::FlipV));
         assert_eq!(31, t.right(Orientation::FlipH));
         assert_eq!(31, t.right(Orientation::FlipVH));
+    }
+
+    #[test]
+    fn test_line() {
+        let t = parse_tile("Tile 555:
+.#..
+##.#
+....
+#.##");
+        assert_eq!("##.#", &t.line(1, Orientation::Original));
+        assert_eq!("....", &t.line(1, Orientation::FlipV));
+        assert_eq!("#.##", &t.line(1, Orientation::FlipH));
+        assert_eq!("##.#", &t.line(0, Orientation::FlipVH));
+        assert_eq!("..#.", &t.line(3, Orientation::FlipVH));
+
+        assert_eq!("..##", &t.line(1, Orientation::Rot90));
+        assert_eq!("#...", &t.line(1, Orientation::Rot90FlipV));
+        assert_eq!("...#", &t.line(1, Orientation::Rot270));
+        assert_eq!("##..", &t.line(1, Orientation::Rot270FlipV));
     }
 
     #[test]
