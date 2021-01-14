@@ -43,6 +43,14 @@ const ORIENTATIONS: [Orientation; 8] = [Orientation::Original, Orientation::Flip
     Orientation::FlipH, Orientation::FlipVH,
     Orientation::Rot90, Rot90FlipV, Rot270, Rot270FlipV];
 
+///                   #
+/// #    ##    ##    ###
+///  #  #  #  #  #  #
+const SEA_MONSTER_POSITIONS: [(usize, usize); 15] = [(0,18),
+    (1,0),(1,5),(1,6),(1,11),(1,12),(1,17),(1,18),(1,19),
+    (2,1),(2,4),(2,7),(2,10),(2,13),(2,16)
+];
+
 impl Tile {
     fn new(num: usize, pic: Vec<Vec<char>>) -> Tile {
         let (l, lflip) = compute_codes(&pic.iter()
@@ -134,17 +142,21 @@ impl Tile {
     }
 
     fn line(&self, num: usize, orient: Orientation) -> String {
-        match orient {
-            Orientation::Original => self.pic[num].iter().collect(),
-            Orientation::FlipV => self.pic.iter().rev().skip(num).next().unwrap().iter().collect(),
-            Orientation::FlipH => self.pic[num].iter().rev().collect(),
-            Orientation::FlipVH => self.pic.iter().rev().skip(num).next().unwrap()
-                .iter().rev().collect(),
-            Orientation::Rot90 => self.pic.iter().rev().map(|l| l[num]).collect(),
-            Orientation::Rot90FlipV => self.pic.iter().rev().map(|l| l[l.len() - num - 1]).collect(),
-            Orientation::Rot270 => self.pic.iter().map(|l| l[l.len() - num - 1]).collect(),
-            Orientation::Rot270FlipV => self.pic.iter().map(|l| l[num]).collect(),
-        }
+        line(&self.pic, num, orient)
+    }
+}
+
+fn line(pic: &Vec<Vec<char>>, num: usize, orient: Orientation) -> String {
+    match orient {
+        Orientation::Original => pic[num].iter().collect(),
+        Orientation::FlipV => pic.iter().rev().skip(num).next().unwrap().iter().collect(),
+        Orientation::FlipH => pic[num].iter().rev().collect(),
+        Orientation::FlipVH => pic.iter().rev().skip(num).next().unwrap()
+            .iter().rev().collect(),
+        Orientation::Rot90 => pic.iter().rev().map(|l| l[num]).collect(),
+        Orientation::Rot90FlipV => pic.iter().rev().map(|l| l[l.len() - num - 1]).collect(),
+        Orientation::Rot270 => pic.iter().map(|l| l[l.len() - num - 1]).collect(),
+        Orientation::Rot270FlipV => pic.iter().map(|l| l[num]).collect(),
     }
 }
 
@@ -235,33 +247,6 @@ fn parse_tile(input: &str) -> Tile {
     Tile::new(num, pic)
 }
 
-// Test if the arrangement matches the pattern where the main
-// tile has the above tile above it and the left tile to the left of it
-//
-// this should return true:
-// _   _   _
-// _   abv _
-// lft mn  _
-//
-// while this should return false:
-// _   abv _
-// mn  _   _
-// _   _   lft
-fn arrangement_contains(arrangement: &Vec<usize>, pattern: &(usize, usize, usize), dim: usize) -> bool {
-    let &(main, above, left) = pattern;
-    let row = main / dim;
-    let col = main % dim;
-    for i in 1 .. arrangement.len() {
-        if arrangement[i] == main {
-            let col_match = if col > 0 { arrangement[i - 1] == left } else { true };
-            let row_match = if row > 0 && i > dim { arrangement[i - dim] == above } else { true };
-            return col_match && row_match;
-        }
-    }
-
-    false
-}
-
 fn arrange(tiles: &Vec<Tile>, neighbors: &Vec<HashSet<usize>>,
            placed: &mut VecDeque<(usize, Orientation)>, dim: usize) -> Option<()> {
     for (tile_ndx, orientation) in
@@ -282,15 +267,38 @@ fn arrange(tiles: &Vec<Tile>, neighbors: &Vec<HashSet<usize>>,
 }
 
 fn join_picture(tiles: &Vec<Tile>, placements: &VecDeque<(usize, Orientation)>,
-                dim: usize) -> Vec<String> {
+                dim: usize) -> Vec<Vec<char>> {
     let line_length = tiles.first().unwrap().pic.len();
     placements.iter().chunks(dim).into_iter().flat_map(|chunk| {
         let row_placements: Vec<(usize, Orientation)> = chunk.into_iter().cloned().collect();
         (1..line_length-1).into_iter()
             .map(move |i| row_placements.iter().map(|&(tile_ndx, tile_orient)|
                 tiles[tile_ndx].line(i, tile_orient)[1..line_length-1].to_string())
-                .join(""))
-    }).collect::<Vec<String>>()
+                .join("")
+                .chars()
+                .collect())
+    }).collect::<Vec<Vec<char>>>()
+}
+
+fn find_sea_monsters(pic: &Vec<Vec<char>>, orient: Orientation) -> HashSet<(usize, usize)> {
+    let mut monster_positions = HashSet::new();
+    let line_length = pic.first().unwrap().len();
+    let oriented_pic: Vec<Vec<char>> = (0..pic.len()).into_iter()
+        .map(|i| line(pic, i, orient).chars().collect())
+        .collect();
+
+    for i in 0..pic.len() - 2 {
+        for j in 0..line_length - 19 {
+            if SEA_MONSTER_POSITIONS.iter()
+                .all(|&(row_offset, col_offset)| oriented_pic[i+row_offset][j+col_offset] == '#') {
+                for (row_offset, col_offset) in &SEA_MONSTER_POSITIONS {
+                    monster_positions.insert((i + row_offset, j + col_offset));
+                }
+            }
+        }
+    }
+
+    monster_positions
 }
 
 fn part1(input: &str) -> usize {
@@ -322,7 +330,14 @@ fn part2(input: &str) -> usize {
     let mut placed: VecDeque<(usize, Orientation)> = VecDeque::new();
     if let Some(_) = arrange(&tiles, &neighbors, &mut placed, dim) {
         let pic = join_picture(&tiles, &placed, dim);
-        println!("{}", pic.iter().join("\n"));
+        for &orient in &ORIENTATIONS {
+            let monster_positions = find_sea_monsters(&pic, orient);
+            if monster_positions.len() > 0 {
+                return pic.iter().flat_map(|line| line.iter())
+                    .filter(|&&c| c == '#')
+                    .count() - monster_positions.len();
+            }
+        }
     } else {
         panic!("No possible arrangement")
     }
@@ -528,11 +543,13 @@ Tile 3079:
     }
 
     #[test]
-    fn test_arrangement_contains() {
-        let v = (0..9).into_iter().collect();
-        assert_eq!(true, arrangement_contains(&v, &(2, 0, 1), 3));
-        assert_eq!(true, arrangement_contains(&v, &(5, 2, 4), 3));
-        assert_eq!(true, arrangement_contains(&v, &(3, 0, 0), 3));
+    fn test_find_sea_monsters() {
+        let pic = ["                  #  ",
+        "#    ##    ##    ###  ",
+        " #  #  #  #  #  #     "].iter().map(|s| s.chars().collect())
+            .collect::<Vec<Vec<char>>>();
+        let monster_positions = find_sea_monsters(&pic, Orientation::Original);
+        assert_eq!(SEA_MONSTER_POSITIONS.len(), monster_positions.len())
     }
 
     #[test]
